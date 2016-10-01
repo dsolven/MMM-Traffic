@@ -15,19 +15,42 @@ module.exports = NodeHelper.create({
 
   getCommute: function(api_url) {
     var self = this;
+    console.log('MMM-Traffic request: ' + api_url + "&departure_time=now")
     request({url: api_url + "&departure_time=now", method: 'GET'}, function(error, response, body) {
       if (!error && response.statusCode == 200) {
         var trafficComparison = 0;
-        if (JSON.parse(body).routes[0].legs[0].duration_in_traffic) {
-          var commute = JSON.parse(body).routes[0].legs[0].duration_in_traffic.text;
-          var noTrafficValue = JSON.parse(body).routes[0].legs[0].duration.value;
-          var withTrafficValue = JSON.parse(body).routes[0].legs[0].duration_in_traffic.value;
-          trafficComparison = parseInt(withTrafficValue)/parseInt(noTrafficValue);
-        } else {
-          var commute = JSON.parse(body).routes[0].legs[0].duration.text;
+        var numRoutes = JSON.parse(body).routes.length;
+        console.log('numRoutes: ' + numRoutes)
+
+        var commuteObj = [];
+
+        for(i=0;i<numRoutes;i++) {
+          if (JSON.parse(body).routes[i].legs[0].duration_in_traffic) {
+            var commute = JSON.parse(body).routes[i].legs[0].duration_in_traffic.text;
+            console.log('duration_in_traffic found: ' + commute)
+            var noTrafficValue = JSON.parse(body).routes[i].legs[0].duration.value;
+            var withTrafficValue = JSON.parse(body).routes[i].legs[0].duration_in_traffic.value;
+            var trafficComparison = parseInt(withTrafficValue)/parseInt(noTrafficValue);
+          } else {
+            var commute = JSON.parse(body).routes[i].legs[0].duration.text;
+            console.log('No duration_in_traffic returned.')
+            //TODO: Indicate no traffic data.
+          }
+          var summary = JSON.parse(body).routes[i].summary;
+
+          commuteObj.push({
+            commute: commute,
+            trafficComparison: trafficComparison,
+            summary: summary
+          });
         }
-        var summary = JSON.parse(body).routes[0].summary;
-        self.sendSocketNotification('TRAFFIC_COMMUTE', {'commute':commute, 'url':api_url, 'trafficComparison': trafficComparison, 'summary':summary});
+        console.log(commuteObj);
+        self.sendSocketNotification('TRAFFIC_COMMUTE', {'commuteObj':commuteObj, 'url':api_url});
+      } else {
+        console.log('MMM-Traffic url request failed:');
+        console.log(error);
+        console.log(JSON.parse(body).error_message);
+        console.log(JSON.parse(body).status);
       }
     });
   },

@@ -15,6 +15,7 @@ Module.register('MMM-Traffic', {
         interval: 300000, //all modules use milliseconds
         origin: '',
         destination: '',
+        alternatives: false,
         traffic_model: 'best_guess',
         departure_time: 'now',
         arrival_time: '',
@@ -48,6 +49,7 @@ Module.register('MMM-Traffic', {
     },
 
     updateCommute: function(self) {
+        Log.log(self.name + ' sending a socket notification');
         if (self.config.arrival_time.length == 4) {
           self.sendSocketNotification('LEAVE_BY', {'url':self.url, 'arrival':self.config.arrival_time});
         } else {
@@ -62,67 +64,55 @@ Module.register('MMM-Traffic', {
 
     getDom: function() {
         var wrapper = document.createElement("div");
-        var commuteInfo = document.createElement('div'); //support for config.changeColor
 
         if (!this.loaded) {
             wrapper.innerHTML = this.config.loadingText;
             return wrapper;
         }
 
-        //symbol
+        // Title block
+        var commuteTitle = document.createElement('div');
+        // Symbol
         var symbol = document.createElement('span');
         symbol.className = this.symbols[this.config.mode] + ' symbol';
-        commuteInfo.appendChild(symbol);
+        commuteTitle.appendChild(symbol);
+        // Route name
+        var routeName = document.createElement('span');
+        routeName.innerHTML = this.config.route_name;
+        commuteTitle.appendChild(routeName);
 
-        if (this.config.arrival_time == '') {
-          //commute time
-          var trafficInfo = document.createElement('span');
-          trafficInfo.innerHTML = this.config.prependText + ' ' + this.commute;
-          commuteInfo.appendChild(trafficInfo);
+        wrapper.appendChild(commuteTitle);
+
+
+        // Route info
+        for (i=0;i<this.commuteObj.length;i++){
+          var curCommute = this.commuteObj[i];
+          var commuteInfo = document.createElement('div');
+          sumSpan = document.createElement('span');
+          timeSpan = document.createElement('span');
+
+          commuteInfo.className = 'small thin light bright';
+
+          sumSpan.innerHTML = curCommute.summary + ': ';
+          timeSpan.innerHTML = curCommute.commute;
 
           //change color if desired and append
           if (this.config.changeColor) {
             if (this.trafficComparison >= 1 + (this.config.limitRed / 100)) {
-              commuteInfo.className += ' red';
+              timeSpan.className += ' red';
             } else if (this.trafficComparison >= 1 + (this.config.limitYellow / 100)) {
-              commuteInfo.className += ' yellow';
+              timeSpan.className += ' yellow';
             } else if (this.config.showGreen) {
-              commuteInfo.className += ' green';
+              timeSpan.className += ' green';
             }
           }
+
+
+          commuteInfo.appendChild(sumSpan);
+          commuteInfo.appendChild(timeSpan);
           wrapper.appendChild(commuteInfo);
-
-          //routeName
-          if (this.config.route_name) {
-            var routeName = document.createElement('div');
-            routeName.className = 'dimmed small';
-            if (this.summary.length > 0 && this.config.show_summary){
-              routeName.innerHTML = this.config.route_name + ' via ' + this.summary; //todo translatable?
-            } else {
-              routeName.innerHTML = this.config.route_name;
-            }
-            wrapper.appendChild(routeName);
-          }
-        } else {
-          //leave-by time
-          var trafficInfo = document.createElement('span');
-          trafficInfo.innerHTML = "Leave by " + this.leaveBy;
-          commuteInfo.appendChild(trafficInfo);
-  	      wrapper.appendChild(commuteInfo);
-
-          //routeName
-          if (this.config.route_name) {
-            var routeName = document.createElement('div');
-            routeName.className = 'dimmed small';
-            if (this.summary.length > 0 && this.config.show_summary){
-              routeName.innerHTML = this.config.route_name + ' via ' + this.summary + " to arrive by " + this.config.arrival_time.substring(0,2) + ":" + this.config.arrival_time.substring(2,4);
-            } else {
-	      console.log(typeof this.config.arrival_time );
-              routeName.innerHTML = this.config.route_name + " to arrive by " + this.config.arrival_time.substring(0,2) + ":" + this.config.arrival_time.substring(2,4);
-            }
-            wrapper.appendChild(routeName);
-          }
         }
+
         return wrapper;
     },
 
@@ -134,20 +124,18 @@ Module.register('MMM-Traffic', {
         params += '&key=' + this.config.api_key;
         params += '&traffic_model=' + this.config.traffic_model;
         params += '&language=' + this.config.language;
+        params += '&alternatives=' + this.config.alternatives;
         return params;
     },
 
     socketNotificationReceived: function(notification, payload) {
+        Log.log(this.name + " received a socket notification: " + notification + " - Payload: " + payload);
         this.leaveBy = '';
         if (notification === 'TRAFFIC_COMMUTE' && payload.url === this.url) {
-            Log.info('received TRAFFIC_COMMUTE');
-            this.commute = payload.commute;
-            this.summary = payload.summary;
-            this.trafficComparison = payload.trafficComparison;
+            this.commuteObj = payload.commuteObj;
             this.loaded = true;
             this.updateDom(1000);
         } else if (notification === 'TRAFFIC_TIMING') {
-            Log.info('received TRAFFIC_TIMING');
             this.leaveBy = payload.commute;
             this.summary = payload.summary;
             this.loaded = true;
